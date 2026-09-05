@@ -150,3 +150,13 @@ class HarvestDelivery(BaseModel):
 class HarvestActionRequest(BaseModel):
     action: str  # 'negotiate', 'agree_price', 'complete'
     price_pen_kg: Optional[float] = None
+
+class DirectPurchaseCreate(BaseModel):
+    producer_name: str
+    product: str
+    weight_kg: float
+    price_paid_pen_kg: float
+    location: Optional[str] = "No especificada"
+    humedad_pct: Optional[float] = None
+    comprador: Optional[str] = None
+    precio_venta_pactado_skg: Optional[float] = None
