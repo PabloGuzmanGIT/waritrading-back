@@ -3,6 +3,10 @@
 .env.*
 !.env.example
 
+# Credenciales de desarrollo local (nunca versionar)
+CREDENCIALES.local.md
+*.local.md
+
 # Python
 venv/
 __pycache__/

@@ -1,29 +1,29 @@
 import datetime
 from sqlalchemy.orm import Session
 from app import models
-from app.database import settings
+from app.database import settings, WEAK_SEED_PASSWORDS
 from app.security import hash_password
 
 # Datos semilla de usuarios. La contraseña se toma de variables de entorno
 # (SEED_*_PASSWORD) para no dejar credenciales fijas en el repo; los defaults
 # de database.py son solo para desarrollo local.
 USERS_SEED = {
-    "admin@hallpayaku.com": {
-        "email": "admin@hallpayaku.com",
+    "admin@waritradingfoods.com": {
+        "email": "admin@waritradingfoods.com",
         "name": "Administrador General",
         "name_en": "General Administrator",
         "role": "admin",
         "password": settings.SEED_ADMIN_PASSWORD,
     },
-    "productor@hallpayaku.com": {
-        "email": "productor@hallpayaku.com",
+    "productor@waritradingfoods.com": {
+        "email": "productor@waritradingfoods.com",
         "name": "Jorge Condori (Coop. Satipo)",
         "name_en": "Jorge Condori (Satipo Coop)",
         "role": "productor",
         "password": settings.SEED_PRODUCTOR_PASSWORD,
     },
-    "comprador@hallpayaku.com": {
-        "email": "comprador@hallpayaku.com",
+    "comprador@waritradingfoods.com": {
+        "email": "comprador@waritradingfoods.com",
         "name": "Michael Green (EuroFoods)",
         "name_en": "Michael Green (EuroFoods)",
         "role": "comprador",
@@ -137,8 +137,8 @@ DEMANDS_SEED = [
 
 # Datos semilla de lotes de trazabilidad
 LOTS_SEED = {
-    "HY-2026-PL01": {
-        "lot_code": "HY-2026-PL01",
+    "WT-2026-PL01": {
+        "lot_code": "WT-2026-PL01",
         "product": "Palta Hass",
         "product_en": "Hass Avocado",
         "cooperative": "Cooperativa Agraria Valles de Satipo",
@@ -166,8 +166,8 @@ LOTS_SEED = {
         "status": "En Tránsito Marítimo",
         "status_en": "In Maritime Transit"
     },
-    "HY-2026-CC03": {
-        "lot_code": "HY-2026-CC03",
+    "WT-2026-CC03": {
+        "lot_code": "WT-2026-CC03",
         "product": "Cacao Orgánico Fino de Aroma",
         "product_en": "Organic Fine Aroma Cocoa",
         "cooperative": "Asociación Agropecuaria del Cacao Oxapampa (DEVIDA)",
@@ -245,7 +245,7 @@ HARVEST_DELIVERIES_SEED = [
         "status": "Completado",
         "price_paid_pen": 18225.00,
         "producer_name": "Jorge Condori (Coop. Satipo)",
-        "producer_email": "productor@hallpayaku.com"
+        "producer_email": "productor@waritradingfoods.com"
     },
     {
         "id": 2,
@@ -257,13 +257,25 @@ HARVEST_DELIVERIES_SEED = [
         "status": "En Negociación",
         "price_paid_pen": 0.00,
         "producer_name": "Jorge Condori (Coop. Satipo)",
-        "producer_email": "productor@hallpayaku.com"
+        "producer_email": "productor@waritradingfoods.com"
     }
 ]
 
 def seed_database(db: Session):
     # 1. Usuarios
     if db.query(models.User).count() == 0:
+        if settings.is_production:
+            weak = sorted(
+                email for email, u in USERS_SEED.items()
+                if (u["password"] or "").strip() in WEAK_SEED_PASSWORDS
+            )
+            if weak:
+                raise RuntimeError(
+                    "No se puede sembrar la BD en producción con contraseñas débiles o "
+                    "sin definir. Setea SEED_ADMIN_PASSWORD, SEED_PRODUCTOR_PASSWORD y "
+                    "SEED_COMPRADOR_PASSWORD con valores fuertes. Cuentas afectadas: "
+                    + ", ".join(weak)
+                )
         for email, u in USERS_SEED.items():
             user = models.User(
                 email=u["email"],

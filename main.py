@@ -1,11 +1,16 @@
 import datetime
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 from typing import List, Dict, Any
 
 from app.database import (
-    Base, engine, get_db, settings, MARKET_PRICES, PRICE_HISTORY, update_prices_simulation
+    Base, engine, get_db, settings, assert_production_config,
+    MARKET_PRICES, PRICE_HISTORY, update_prices_simulation
 )
 from app.seed import seed_database
 from app import models
@@ -16,6 +21,9 @@ from app.schemas import (
 )
 from app.auth import create_access_token, get_current_user, check_role
 from app.security import verify_password, hash_password, needs_rehash
+
+# Falla rápido si arrancamos en producción con configuración insegura.
+assert_production_config()
 
 # Inicializar y autocrear tablas de la base de datos
 Base.metadata.create_all(bind=engine)
@@ -44,10 +52,33 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Rate limiting (protege el login de fuerza bruta). Almacenamiento en memoria:
+# suficiente para una sola instancia; con varias réplicas usar Redis vía
+# `storage_uri`.
+def _client_ip(request: Request) -> str:
+    """IP real del cliente. Detrás del proxy de Railway/Vercel el socket es el
+    del proxy, así que tomamos la primera entrada de X-Forwarded-For."""
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return get_remote_address(request)
+
+limiter = Limiter(key_func=_client_ip)
+app.state.limiter = limiter
+
+
+@app.exception_handler(RateLimitExceeded)
+def _rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        content={"detail": "Demasiados intentos. Esperá un momento e intentá de nuevo."},
+    )
+
 # Configuración de CORS
-# - Producción: dominios exactos vía CORS_ORIGINS (env var, separados por coma).
-# - Desarrollo: localhost, ngrok, localtunnel y los subdominios *.up.railway.app
-#   (para previews) se permiten siempre por regex.
+# - Producción: SOLO dominios exactos vía CORS_ORIGINS (env var, separados por coma).
+# - Desarrollo: además localhost, ngrok, localtunnel y los subdominios
+#   *.up.railway.app (previews) se permiten por regex. Ese regex NO se aplica en
+#   producción para no exponer la API a cualquier subdominio de esos proveedores.
 DEV_ORIGIN_REGEX = (
     r"https?://("
     r"localhost|127\.0\.0\.1"
@@ -60,7 +91,7 @@ DEV_ORIGIN_REGEX = (
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
-    allow_origin_regex=DEV_ORIGIN_REGEX,
+    allow_origin_regex=None if settings.is_production else DEV_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -72,6 +103,10 @@ def startup_event():
     db = next(get_db())
     try:
         seed_database(db)
+    except RuntimeError:
+        # Config insegura (p. ej. contraseñas semilla débiles en producción):
+        # abortar el arranque para que el deploy falle de forma visible.
+        raise
     except Exception as e:
         print(f"Error al poblar datos semilla: {e}")
     finally:
@@ -202,7 +237,8 @@ def get_ports_logistics(db: Session = Depends(get_db)):
 
 # 7. Autenticación (Login)
 @app.post("/api/auth/login", response_model=TokenResponse)
-def login(credentials: LoginRequest, db: Session = Depends(get_db)):
+@limiter.limit("5/minute; 30/hour")
+def login(request: Request, credentials: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.email == credentials.email).first()
     if not user or not verify_password(credentials.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Email o contraseña incorrectos")
@@ -364,7 +400,7 @@ def get_portal_data(current_user: dict = Depends(get_current_user), db: Session 
             "my_active_requests": demands_list,
             "logistics_status": [
                 {
-                    "lot_code": "HY-2026-PL01",
+                    "lot_code": "WT-2026-PL01",
                     "product": "Palta Hass",
                     "destination": "Puerto de Róterdam",
                     "eta": "2026-07-13",

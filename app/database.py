@@ -8,8 +8,19 @@ from sqlalchemy.orm import sessionmaker
 # Valor centinela: si SECRET_KEY sigue siendo esto en producción, algo está mal.
 DEV_SECRET_KEY = "dev-insecure-not-for-production"
 
+# Contraseñas semilla que NO se permiten en producción (defaults de desarrollo
+# y valores triviales conocidos).
+WEAK_SEED_PASSWORDS = frozenset({
+    "", "admin123", "productor123", "comprador123",
+    "changeme", "password", "123456", "secret",
+})
+
 # Configuración de variables de entorno usando pydantic-settings
 class Settings(BaseSettings):
+    # Entorno de ejecución. En "production" se aplican validaciones estrictas
+    # (SECRET_KEY obligatoria, contraseñas semilla fuertes, CORS sin regex de dev).
+    APP_ENV: str = "development"
+
     # La variable DATABASE_URL se lee automáticamente de .env o del entorno real (Railway)
     # Hacemos fallback a SQLite local si no está configurada
     DATABASE_URL: str = "sqlite:///./sql_app.db"
@@ -38,8 +49,39 @@ class Settings(BaseSettings):
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
 
+    @property
+    def is_production(self) -> bool:
+        return self.APP_ENV.strip().lower() in {"production", "prod"}
+
 
 settings = Settings()
+
+
+def assert_production_config() -> None:
+    """Falla rápido si la app arranca en producción con configuración insegura.
+
+    Se invoca al importar main.py. No valida las contraseñas semilla aquí porque
+    solo importan al sembrar una BD vacía (ver `seed.py`).
+    """
+    if not settings.is_production:
+        return
+
+    problems = []
+    if settings.SECRET_KEY == DEV_SECRET_KEY or len(settings.SECRET_KEY) < 32:
+        problems.append(
+            "SECRET_KEY no está configurada o es demasiado corta. Generá una con:\n"
+            '  python -c "import secrets; print(secrets.token_urlsafe(48))"'
+        )
+    if not settings.cors_origins_list:
+        problems.append(
+            "CORS_ORIGINS está vacío. Listá los dominios del frontend separados por coma."
+        )
+
+    if problems:
+        raise RuntimeError(
+            "Configuración de producción insegura (APP_ENV=production):\n- "
+            + "\n- ".join(problems)
+        )
 
 # Corregir URL si es del formato postgres:// (que Railway entrega y SQLAlchemy v2+ rechaza)
 db_url = settings.DATABASE_URL
