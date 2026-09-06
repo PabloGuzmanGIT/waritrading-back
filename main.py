@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from typing import List, Dict, Any
 
 from app.database import (
-    Base, engine, get_db, MARKET_PRICES, PRICE_HISTORY, update_prices_simulation
+    Base, engine, get_db, settings, MARKET_PRICES, PRICE_HISTORY, update_prices_simulation
 )
 from app.seed import seed_database
 from app import models
@@ -15,6 +15,7 @@ from app.schemas import (
     HarvestCreate, HarvestDelivery, HarvestActionRequest, DirectPurchaseCreate
 )
 from app.auth import create_access_token, get_current_user, check_role
+from app.security import verify_password, hash_password, needs_rehash
 
 # Inicializar y autocrear tablas de la base de datos
 Base.metadata.create_all(bind=engine)
@@ -44,9 +45,22 @@ app = FastAPI(
 )
 
 # Configuración de CORS
+# - Producción: dominios exactos vía CORS_ORIGINS (env var, separados por coma).
+# - Desarrollo: localhost, ngrok, localtunnel y los subdominios *.up.railway.app
+#   (para previews) se permiten siempre por regex.
+DEV_ORIGIN_REGEX = (
+    r"https?://("
+    r"localhost|127\.0\.0\.1"
+    r"|[a-z0-9-]+\.ngrok-free\.app|[a-z0-9-]+\.ngrok\.app"
+    r"|[a-z0-9-]+\.loca\.lt|[a-z0-9-]+\.localtunnel\.me"
+    r"|[a-z0-9-]+\.up\.railway\.app"
+    r")(:\d+)?"
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|.*\.ngrok-free\.app|.*\.ngrok\.app|.*\.localtunnel\.me|.*\.railway\.app|.*\.up\.railway\.app|.*waritrading.*)(:\d+)?",
+    allow_origins=settings.cors_origins_list,
+    allow_origin_regex=DEV_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -190,9 +204,15 @@ def get_ports_logistics(db: Session = Depends(get_db)):
 @app.post("/api/auth/login", response_model=TokenResponse)
 def login(credentials: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.email == credentials.email).first()
-    if not user or user.password_hash != credentials.password:
+    if not user or not verify_password(credentials.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Email o contraseña incorrectos")
-    
+
+    # Migración transparente: si el valor guardado era texto plano heredado,
+    # lo reemplazamos por un hash bcrypt en el primer login exitoso.
+    if needs_rehash(user.password_hash):
+        user.password_hash = hash_password(credentials.password)
+        db.commit()
+
     token = create_access_token(user.email, user.role)
     return {
         "access_token": token,

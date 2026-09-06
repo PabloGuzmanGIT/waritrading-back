@@ -1,29 +1,33 @@
 import datetime
 from sqlalchemy.orm import Session
 from app import models
+from app.database import settings
+from app.security import hash_password
 
-# Datos semilla de usuarios
+# Datos semilla de usuarios. La contraseña se toma de variables de entorno
+# (SEED_*_PASSWORD) para no dejar credenciales fijas en el repo; los defaults
+# de database.py son solo para desarrollo local.
 USERS_SEED = {
     "admin@hallpayaku.com": {
         "email": "admin@hallpayaku.com",
         "name": "Administrador General",
         "name_en": "General Administrator",
         "role": "admin",
-        "password_hash": "admin123"
+        "password": settings.SEED_ADMIN_PASSWORD,
     },
     "productor@hallpayaku.com": {
         "email": "productor@hallpayaku.com",
         "name": "Jorge Condori (Coop. Satipo)",
         "name_en": "Jorge Condori (Satipo Coop)",
         "role": "productor",
-        "password_hash": "productor123"
+        "password": settings.SEED_PRODUCTOR_PASSWORD,
     },
     "comprador@hallpayaku.com": {
         "email": "comprador@hallpayaku.com",
         "name": "Michael Green (EuroFoods)",
         "name_en": "Michael Green (EuroFoods)",
         "role": "comprador",
-        "password_hash": "comprador123"
+        "password": settings.SEED_COMPRADOR_PASSWORD,
     }
 }
 
@@ -266,7 +270,7 @@ def seed_database(db: Session):
                 name=u["name"],
                 name_en=u["name_en"],
                 role=u["role"],
-                password_hash=u["password_hash"]
+                password_hash=hash_password(u["password"]),
             )
             db.add(user)
         print("Semilla: Usuarios cargados con éxito.")

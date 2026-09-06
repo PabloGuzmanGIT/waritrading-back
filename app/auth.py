@@ -1,13 +1,22 @@
 import datetime
+import sys
+
 import jwt
 from fastapi import HTTPException, Security, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
-from app.database import get_db
+from app.database import get_db, settings, DEV_SECRET_KEY
 from app import models
 
-SECRET_KEY = "hallpa_yaku_secret_key_demo"
+SECRET_KEY = settings.SECRET_KEY
 ALGORITHM = "HS256"
+
+if SECRET_KEY == DEV_SECRET_KEY:
+    print(
+        "\n*** ADVERTENCIA: SECRET_KEY no configurada, usando clave de desarrollo. "
+        "Setea SECRET_KEY como variable de entorno antes de producción. ***\n",
+        file=sys.stderr,
+    )
 
 security = HTTPBearer()
 

@@ -5,17 +5,39 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
+# Valor centinela: si SECRET_KEY sigue siendo esto en producción, algo está mal.
+DEV_SECRET_KEY = "dev-insecure-not-for-production"
+
 # Configuración de variables de entorno usando pydantic-settings
 class Settings(BaseSettings):
     # La variable DATABASE_URL se lee automáticamente de .env o del entorno real (Railway)
     # Hacemos fallback a SQLite local si no está configurada
     DATABASE_URL: str = "sqlite:///./sql_app.db"
-    
+
+    # Clave para firmar los JWT. OBLIGATORIO setearla en producción (Railway).
+    SECRET_KEY: str = DEV_SECRET_KEY
+
+    # Orígenes permitidos para CORS, separados por coma.
+    # Ej: "https://waritradingfoods.com,https://www.waritradingfoods.com"
+    # En local siempre se permiten localhost / ngrok / localtunnel (ver main.py).
+    CORS_ORIGINS: str = ""
+
+    # Contraseñas de los usuarios semilla. En producción setear valores reales;
+    # los defaults son solo para desarrollo local.
+    SEED_ADMIN_PASSWORD: str = "admin123"
+    SEED_PRODUCTOR_PASSWORD: str = "productor123"
+    SEED_COMPRADOR_PASSWORD: str = "comprador123"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore"
     )
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
+
 
 settings = Settings()
 
