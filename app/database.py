@@ -84,9 +84,12 @@ def assert_production_config() -> None:
         )
 
 # Corregir URL si es del formato postgres:// (que Railway entrega y SQLAlchemy v2+ rechaza)
+# y fijar el driver instalado: SQLAlchemy 2.1 usa psycopg por defecto, no psycopg2.
 db_url = settings.DATABASE_URL
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
+if db_url.startswith("postgresql://"):
+    db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
 
 # Configurar motor de base de datos
 connect_args = {}
