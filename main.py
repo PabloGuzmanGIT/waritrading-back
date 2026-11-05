@@ -1,5 +1,5 @@
 import datetime
-from fastapi import FastAPI, Depends, HTTPException, Request, status
+from fastapi import BackgroundTasks, FastAPI, Depends, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -20,6 +20,7 @@ from app.schemas import (
     HarvestCreate, HarvestDelivery, HarvestActionRequest, DirectPurchaseCreate
 )
 from app.auth import create_access_token, get_current_user, check_role
+from app.notifications import send_contact_notification
 from app.security import verify_password, hash_password, needs_rehash
 
 # Falla rápido si arrancamos en producción con configuración insegura.
@@ -211,7 +212,22 @@ def get_traceability_info(lot_code: str, db: Session = Depends(get_db)):
 
 # 5. Formulario de Contacto General / Cotizaciones
 @app.post("/api/contact")
-def receive_contact(contact: ContactRequest, db: Session = Depends(get_db)):
+@limiter.limit("5/minute; 30/hour")
+def receive_contact(
+    request: Request,
+    contact: ContactRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    contact_received = {
+        "status": "success",
+        "message": "Mensaje recibido correctamente. Nos pondremos en contacto pronto.",
+        "message_en": "Message received successfully. We will get back to you shortly."
+    }
+    # Trampa antispam: se responde igual para no delatarla, pero no se guarda.
+    if contact.website:
+        return contact_received
+
     new_contact = models.Contact(
         name=contact.name,
         email=contact.email,
@@ -224,11 +240,8 @@ def receive_contact(contact: ContactRequest, db: Session = Depends(get_db)):
     )
     db.add(new_contact)
     db.commit()
-    return {
-        "status": "success",
-        "message": "Mensaje recibido correctamente. Nos pondremos en contacto pronto.",
-        "message_en": "Message received successfully. We will get back to you shortly."
-    }
+    background_tasks.add_task(send_contact_notification, contact)
+    return contact_received
 
 # 6. Puertos Logística
 @app.get("/api/logistics/ports", response_model=List[PortLogistics])

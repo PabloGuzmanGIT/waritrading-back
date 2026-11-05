@@ -39,6 +39,12 @@ class Settings(BaseSettings):
     SEED_PRODUCTOR_PASSWORD: str = "productor123"
     SEED_COMPRADOR_PASSWORD: str = "comprador123"
 
+    # Avisos por correo del formulario web. Si falta alguna, no se envía el aviso
+    # pero la consulta se guarda igual. CONTACT_EMAIL_TO admite varios, por coma.
+    RESEND_API_KEY: str = ""
+    CONTACT_EMAIL_FROM: str = ""
+    CONTACT_EMAIL_TO: str = ""
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -48,6 +54,14 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
+
+    @property
+    def contact_email_to_list(self) -> list[str]:
+        return [e.strip() for e in self.CONTACT_EMAIL_TO.split(",") if e.strip()]
+
+    @property
+    def contact_email_enabled(self) -> bool:
+        return bool(self.RESEND_API_KEY and self.CONTACT_EMAIL_FROM and self.contact_email_to_list)
 
     @property
     def is_production(self) -> bool:

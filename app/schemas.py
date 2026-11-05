@@ -118,6 +118,8 @@ class ContactRequest(BaseModel):
     product_interest: str
     volume_tons: Optional[float] = None
     message: str
+    # Trampa antispam: campo oculto en el formulario que solo llenan los bots.
+    website: Optional[str] = None
 
 # Puertos Logística
 class PortLogistics(BaseModel):
