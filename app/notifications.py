@@ -31,10 +31,12 @@ def build_contact_email(contact) -> dict:
         ("Volumen", f"{contact.volume_tons} TM" if contact.volume_tons is not None else None),
     ]
     summary = "\n".join(f"{label}: {value}" for label, value in rows if value)
+    # Sin correo no se envía `reply_to`: el contacto va por teléfono dentro del detalle.
+    reply_to = {"reply_to": contact.email} if contact.email else {}
     return {
         "from": settings.CONTACT_EMAIL_FROM,
         "to": settings.contact_email_to_list,
-        "reply_to": contact.email,
+        **reply_to,
         "subject": _one_line(f"Nueva consulta web: {contact.name} - {contact.product_interest}")[:150],
         "text": f"{summary}\n\nDetalle:\n{contact.message}\n",
     }

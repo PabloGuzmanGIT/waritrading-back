@@ -230,7 +230,7 @@ def receive_contact(
 
     new_contact = models.Contact(
         name=contact.name,
-        email=contact.email,
+        email=contact.email or "",  # La columna es NOT NULL; sin correo se guarda vacío.
         company=contact.company,
         country=contact.country,
         product_interest=contact.product_interest,

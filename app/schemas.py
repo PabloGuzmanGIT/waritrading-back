@@ -112,7 +112,9 @@ class TokenResponse(BaseModel):
 # Formulario de Contacto
 class ContactRequest(BaseModel):
     name: str
-    email: EmailStr
+    # Opcional solo para quien ofrece su producción: muchos productores no usan
+    # correo y dejan su teléfono en `message`.
+    email: Optional[EmailStr] = None
     company: Optional[str] = None
     country: str
     product_interest: str
